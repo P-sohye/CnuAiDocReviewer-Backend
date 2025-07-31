@@ -9,6 +9,7 @@ public class LoginResponseDTO {
 
     private String memberId;
     private String name;
-    private String role;  // STUDENT or ADMIN
-
+    private String role;
+    private String department;
+    private String academicStatus;
 }
