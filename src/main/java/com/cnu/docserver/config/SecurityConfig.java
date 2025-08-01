@@ -17,11 +17,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // CSRF 비활성화
-                .cors(cors -> cors.configure(http)) // CORS 허용 (필요 시 설정 클래스 따로 가능)
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                )
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/login",
@@ -29,12 +28,12 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .anyRequest().authenticated()
-                )
-                .formLogin(Customizer.withDefaults()); // 기본 로그인 폼 (API 기반이면 disable 가능)
+                        .anyRequest().authenticated())
+                .formLogin().disable();  // React 프론트 사용 시
 
         return http.build();
     }
+
 
     // CORS 설정을 여기서 글로벌하게 허용하려면 이렇게 추가 가능
     @Bean

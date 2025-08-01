@@ -16,15 +16,18 @@ public class AuthService {
     private final StudentRepository studentRepository;
 
     public LoginResponseDTO login(LoginRequestDTO request) {
-        // 사용자 존재 확인
         Member member = memberRepository.findById(request.getMemberId())
-                .orElseThrow(() -> new RuntimeException("사용자 없음"));
+                .orElseThrow(() -> new IllegalArgumentException("해당 아이디의 사용자가 존재하지 않습니다."));
 
-        // 비밀번호 검증
         if (!member.getPassword().equals(request.getPassword())) {
-            throw new RuntimeException("비밀번호 불일치");
+            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
         return LoginResponseDTO.from(member);
+    }
+
+    public Member findMemberById(String memberId) {
+        return memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
     }
 }

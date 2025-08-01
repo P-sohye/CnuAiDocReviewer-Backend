@@ -6,9 +6,9 @@ import com.cnu.docserver.auth.service.AuthService;
 import com.cnu.docserver.user.entity.Member;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,16 +19,37 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Operation(summary = "로그인 요청", description = "아이디와 비밀번호로 로그인 처리합니다.")
+    /**
+     * 로그인 처리: ID, PW 기반 로그인 후 세션에 사용자 저장
+     */
+    @Operation(summary = "로그인", description = "아이디와 비밀번호로 로그인하고 세션에 사용자 정보를 저장합니다.")
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDTO> login(@RequestBody LoginRequestDTO requestDTO) {
+    public ResponseEntity<LoginResponseDTO> login(
+            @RequestBody LoginRequestDTO requestDTO,
+            HttpSession session
+    ) {
+        // 로그인 처리 및 사용자 정보 획득
         LoginResponseDTO response = authService.login(requestDTO);
+
+        // 로그인한 사용자 정보를 세션에 저장
+        Member loginMember = authService.findMemberById(response.getMemberId());
+        session.setAttribute("loginUser", loginMember);
+
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "현재 로그인된 사용자 정보 조회", description = "세션 또는 토큰 기반으로 로그인된 사용자 정보를 반환합니다.")
+    /**
+     * 현재 로그인된 사용자 정보 반환 (세션 기반)
+     */
+    @Operation(summary = "내 정보 조회", description = "현재 로그인된 사용자 정보를 반환합니다.")
     @GetMapping("/me")
-    public ResponseEntity<LoginResponseDTO> getMyInfo(@AuthenticationPrincipal Member member) {
-        return ResponseEntity.ok(LoginResponseDTO.from(member));
+    public ResponseEntity<LoginResponseDTO> getMyInfo(HttpSession session) {
+        Member loginMember = (Member) session.getAttribute("loginUser");
+
+        if (loginMember == null) {
+            return ResponseEntity.status(401).build(); // UNAUTHORIZED
+        }
+
+        return ResponseEntity.ok(LoginResponseDTO.from(loginMember));
     }
 }
