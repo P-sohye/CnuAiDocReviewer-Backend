@@ -20,7 +20,7 @@ public class Student {
     private String studentId;
 
     @OneToOne
-    @JoinColumn(name = "member_id", referencedColumnName = "member_id")
+    @JoinColumn(name = "member_id", referencedColumnName = "member_id", nullable = false)
     private Member member;
 
     @Column(nullable = false)

@@ -4,6 +4,7 @@ import com.cnu.docserver.auth.dto.LoginRequestDTO;
 import com.cnu.docserver.auth.dto.LoginResponseDTO;
 import com.cnu.docserver.user.entity.Member;
 import com.cnu.docserver.user.repository.MemberRepository;
+import com.cnu.docserver.user.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final MemberRepository memberRepository;
+    private final StudentRepository studentRepository;
 
     public LoginResponseDTO login(LoginRequestDTO request) {
         // 사용자 존재 확인
@@ -23,11 +25,6 @@ public class AuthService {
             throw new RuntimeException("비밀번호 불일치");
         }
 
-        // 성공 시 응답 DTO 생성
-        return LoginResponseDTO.builder()
-                .memberId(member.getMemberId())
-                .name(member.getName())
-                .role(member.getRole().name())
-                .build();
+        return LoginResponseDTO.from(member);
     }
 }

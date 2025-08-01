@@ -18,6 +18,9 @@ public class Member {
     @Column(name = "member_id")
     private String memberId;
 
+    @OneToOne(mappedBy = "member")
+    private Student student;
+
     @Column(nullable = false)
     private String password;
 
@@ -26,7 +29,7 @@ public class Member {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role;  // → enum 클래스 따로 만들기
+    private Role role;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
