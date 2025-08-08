@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.util.List;
 
 @Getter
@@ -14,6 +13,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocTypeRequestDTO {
+
     @Schema(description = "부서 ID", example = "1")
     @NotNull
     private Integer departmentId;

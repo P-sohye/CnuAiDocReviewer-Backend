@@ -11,10 +11,13 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class DocTypeEditResponseDTO {
+public class DocTypeEditRequestDTO {
 
+    @NotBlank
     private String title;
-    private List<String> requiredFields;
-    private List<String> exampleValues;
-    private String fileUrl; // 조회용
+
+    private List<@NotBlank String> requiredFields;
+    private List<@NotBlank String> exampleValues;
+
+    private MultipartFile file; // 업로드 파일
 }

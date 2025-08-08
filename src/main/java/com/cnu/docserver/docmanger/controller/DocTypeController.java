@@ -1,5 +1,6 @@
 package com.cnu.docserver.docmanger.controller;
 
+import com.cnu.docserver.docmanger.dto.DocTypeEditRequestDTO;
 import com.cnu.docserver.docmanger.dto.DocTypeEditResponseDTO;
 import com.cnu.docserver.docmanger.dto.DocTypeRequestDTO;
 import com.cnu.docserver.docmanger.dto.DocTypeResponseDTO;
@@ -48,4 +49,22 @@ public class DocTypeController {
     public DocTypeEditResponseDTO getDocTypeForEdit(@PathVariable Integer docTypeId) {
         return docTypeService.getDocTypeForEdit(docTypeId);
     }
+
+    @PutMapping(value = "/{docTypeId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "문서 수정", description = "문서 제목, 파일, 필수 항목, 예시 항목을 수정합니다.")
+    public String updateDocType(
+            @PathVariable Integer docTypeId,
+            @ModelAttribute @Valid DocTypeEditRequestDTO editRequestDTO
+    ) {
+        docTypeService.updateDocType(
+                docTypeId,
+                editRequestDTO.getTitle(),
+                editRequestDTO.getRequiredFields(),
+                editRequestDTO.getExampleValues(),
+                editRequestDTO.getFile()
+        );
+        return "수정 완료";
+    }
+
+
 }
