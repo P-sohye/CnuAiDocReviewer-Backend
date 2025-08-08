@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -32,10 +33,22 @@ public class DocType {
     @Column(nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-    @OneToMany(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<OriginalFile> files;
+    @OneToOne(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    private OriginalFile originalFile;
 
     @OneToMany(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RequiredField> requiredFields;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
 }
 

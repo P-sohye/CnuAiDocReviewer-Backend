@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface OriginalFileRepository extends JpaRepository<OriginalFile, Long> {
+public interface OriginalFileRepository extends JpaRepository<OriginalFile, Integer> {
     List<OriginalFile> findByDocType(DocType docType);
 }

@@ -26,7 +26,8 @@ public class SecurityConfig {
                                 "/auth/login",
                                 "/auth/me",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**"
+                                "/v3/api-docs/**",
+                                "/api/admin/documents/**"
                         ).permitAll()
                         .anyRequest().authenticated())
                 .formLogin().disable();  // React 프론트 사용 시

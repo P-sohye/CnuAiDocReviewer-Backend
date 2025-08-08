@@ -19,7 +19,7 @@ public class OriginalFile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer originalFileId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "doc_type_id", nullable = false)
     private DocType docType;
 
@@ -29,4 +29,8 @@ public class OriginalFile {
     @Column(nullable = false)
     private LocalDateTime uploadedAt = LocalDateTime.now();
 
+    @PrePersist
+    public void prePersist() {
+        this.uploadedAt = LocalDateTime.now();
+    }
 }

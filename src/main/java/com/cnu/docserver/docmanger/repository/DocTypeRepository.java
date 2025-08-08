@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface DocTypeRepository extends JpaRepository<DocType, Long> {
+public interface DocTypeRepository extends JpaRepository<DocType, Integer> {
     List<DocType> findByDepartment(Department department); // 부서별 서류 목록
 }

@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface RequiredFieldRepository extends JpaRepository<RequiredField, Long> {
+public interface RequiredFieldRepository extends JpaRepository<RequiredField, Integer> {
     List<RequiredField> findByDocType(DocType docType);
 }

@@ -17,7 +17,7 @@ public class RequiredField {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long requiredFieldId;
+    private Integer requiredFieldId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "doc_type_id", nullable = false)
@@ -28,8 +28,5 @@ public class RequiredField {
 
     @Column(length = 255)
     private String exampleValue;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
 
 }
