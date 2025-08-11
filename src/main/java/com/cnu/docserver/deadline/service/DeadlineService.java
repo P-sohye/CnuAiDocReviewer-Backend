@@ -1,16 +1,18 @@
 package com.cnu.docserver.deadline.service;
 
+import com.cnu.docserver.deadline.dto.DeadlineRequestDTO;
 import com.cnu.docserver.deadline.dto.DeadlineStatusDTO;
 import com.cnu.docserver.deadline.entity.Deadline;
 import com.cnu.docserver.deadline.repository.DeadlineRepository;
-import com.cnu.docserver.docmanger.entity.Department;
+import com.cnu.docserver.department.entity.Department;
 import com.cnu.docserver.docmanger.entity.DocType;
-import com.cnu.docserver.docmanger.repository.DepartmentRepository;
+import com.cnu.docserver.department.repository.DepartmentRepository;
 import com.cnu.docserver.docmanger.repository.DocTypeRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +26,7 @@ public class DeadlineService {
 
 
 
+    // 부서별 마감일 조회
     @Transactional
     public List<DeadlineStatusDTO> getDeadlineByDepartment(Integer departmentId){
         Department department = departmentRepository.findById(departmentId)
@@ -43,5 +46,31 @@ public class DeadlineService {
                 .toList();
     }
 
+    //등록 + 수정 registerOrUpdateDeadline()
+    @Transactional
+    public void registerOrUpdateDeadline(DeadlineRequestDTO deadlineRequestDTO){
+        DocType docType = docTypeRepository.findById(deadlineRequestDTO.getDocTypeId())
+                .orElseThrow(()->new RuntimeException("문서를 찾을 수 없습니다."));
 
+        // 오늘 이후만 날짜 등록 허용
+        if (deadlineRequestDTO.getDeadline() != null && !deadlineRequestDTO.getDeadline().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("마감일은 오늘 이후 날짜만 설정할 수 있습니다.");
+        }
+
+        Optional<Deadline> existingDeadline = deadlineRepository.findByDocType(docType);
+
+        //deadline 존재시 수정, 없으면 새로 저장
+        Deadline deadline = existingDeadline.orElseGet(()->Deadline.builder().docType(docType).build());
+        deadline.setDeadline(deadlineRequestDTO.getDeadline());
+        deadlineRepository.save(deadline);
+    }
+
+    //삭제 deleteDeadlineByDocTypeId
+    @Transactional
+    public void deleteDeadlineByDocTypeId(Integer docTypeId) {
+        DocType docType = docTypeRepository.findById(docTypeId)
+                .orElseThrow(() -> new RuntimeException("문서를 찾을 수 없습니다."));
+        deadlineRepository.findByDocType(docType)
+                .ifPresent(deadlineRepository::delete);
+    }
 }

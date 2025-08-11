@@ -1,6 +1,6 @@
 package com.cnu.docserver.docmanger.repository;
 
-import com.cnu.docserver.docmanger.entity.Department;
+import com.cnu.docserver.department.entity.Department;
 import com.cnu.docserver.docmanger.entity.DocType;
 import org.springframework.data.jpa.repository.JpaRepository;
 

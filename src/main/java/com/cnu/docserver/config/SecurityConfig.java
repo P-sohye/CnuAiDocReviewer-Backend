@@ -7,8 +7,11 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -18,35 +21,39 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(Customizer.withDefaults())
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .cors(Customizer.withDefaults()) // ← 아래 CorsConfigurationSource를 사용
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/login",
                                 "/auth/me",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/api/admin/documents/**"
+                                "/api/admin/documents/**",
+                                "/uploads/**",
+                                "/api/admin/deadline/**",
+                                "/api/admin/departments/**"
                         ).permitAll()
-                        .anyRequest().authenticated())
-                .formLogin().disable();  // React 프론트 사용 시
-
+                        .anyRequest().authenticated()
+                )
+                .formLogin(form -> form.disable());
         return http.build();
     }
 
-
-    // CORS 설정을 여기서 글로벌하게 허용하려면 이렇게 추가 가능
     @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:3000") // 프론트 주소
-                        .allowedMethods("GET", "POST", "PUT", "DELETE")
-                        .allowCredentials(true);
-            }
-        };
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        // 프론트 출처
+        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        // 또는 패턴 허용: config.setAllowedOriginPatterns(List.of("http://localhost:*"));
+
+        config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        config.setAllowedHeaders(List.of("*")); // Content-Type, X-Requested-With 등
+        config.setExposedHeaders(List.of("Set-Cookie")); // 필요 시
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 }

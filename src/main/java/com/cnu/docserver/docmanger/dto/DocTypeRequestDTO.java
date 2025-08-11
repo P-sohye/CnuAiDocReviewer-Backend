@@ -26,7 +26,7 @@ public class DocTypeRequestDTO {
     private List<@NotBlank String> requiredFields;
 
     @Schema(description = "예시 값 목록", example = "[\"홍길동\", \"202312345\"]")
-    private List<@NotBlank String> exampleValues;
+    private List< String> exampleValues;
 
     @Schema(description = "업로드 파일")
     private MultipartFile file; // 업로드 파일 (null 가능)

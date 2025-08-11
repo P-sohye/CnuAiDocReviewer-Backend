@@ -2,11 +2,11 @@ package com.cnu.docserver.docmanger.service;
 
 import com.cnu.docserver.docmanger.dto.DocTypeEditResponseDTO;
 import com.cnu.docserver.docmanger.dto.DocTypeResponseDTO;
-import com.cnu.docserver.docmanger.entity.Department;
+import com.cnu.docserver.department.entity.Department;
 import com.cnu.docserver.docmanger.entity.DocType;
 import com.cnu.docserver.docmanger.entity.OriginalFile;
 import com.cnu.docserver.docmanger.entity.RequiredField;
-import com.cnu.docserver.docmanger.repository.DepartmentRepository;
+import com.cnu.docserver.department.repository.DepartmentRepository;
 import com.cnu.docserver.docmanger.repository.DocTypeRepository;
 import com.cnu.docserver.docmanger.repository.OriginalFileRepository;
 import com.cnu.docserver.docmanger.repository.RequiredFieldRepository;
@@ -30,36 +30,39 @@ public class DocTypeService {
 
     //서류 등록
     @Transactional
-    public DocType registerDocType(Integer departmentId, String title,
-                                   List<String> requiredFields, List<String> exampleValues,
-                                   MultipartFile file) {
-
+    public DocType registerDocType(
+            Integer departmentId,
+            String title,
+            List<String> requiredFields,
+            List<String> exampleValues,
+            MultipartFile file
+    ) {
         Department department = departmentRepository.findById(departmentId)
                 .orElseThrow(() -> new IllegalArgumentException("부서를 찾을 수 없습니다."));
 
-        // 1. 서류 유형 저장
         DocType docType = DocType.builder()
                 .department(department)
                 .title(title)
                 .build();
         docTypeRepository.save(docType);
 
-        // 2. 필수 항목 저장
         saveRequiredFields(docType, requiredFields, exampleValues);
 
-        // 3. 단일 파일 저장
+        // 파일 1개만 유지 (기존 있으면 교체)
         if (file != null && !file.isEmpty()) {
-            saveSingleFile(docType, file);
+            upsertFile(docType, file);
         }
-
         return docType;
     }
 
     //서류 수정
     @Transactional
-    public void updateDocType(Integer docTypeId, String title,
-                              List<String> requiredFields, List<String> exampleValues,
-                              MultipartFile file) {
+    public void updateDocType(
+            Integer docTypeId,
+            String title,
+            List<String> requiredFields,
+            List<String> exampleValues,
+            MultipartFile file) {
 
         DocType docType = docTypeRepository.findById(docTypeId)
                 .orElseThrow(() -> new RuntimeException("문서를 찾을 수 없습니다."));
@@ -69,8 +72,7 @@ public class DocTypeService {
 
         // 2. 단일 파일 교체
         if (file != null && !file.isEmpty()) {
-            deleteExistingFile(docType);
-            saveSingleFile(docType, file);
+            upsertFile(docType, file);
         }
 
         // 3. 필수 항목 업데이트
@@ -104,9 +106,9 @@ public class DocTypeService {
 
         List<RequiredField> requiredFields = requiredFieldRepository.findByDocType(docType);
 
-        // 단일 파일 기준이므로 get(0)만 조회
-        List<OriginalFile> fileList = originalFileRepository.findByDocType(docType);
-        String fileUrl = fileList.isEmpty() ? null : fileList.get(0).getFileUrl();
+        String fileUrl = originalFileRepository.findByDocType(docType)
+                .map(OriginalFile::getFileUrl)
+                .orElse(null);
 
         return DocTypeEditResponseDTO.builder()
                 .title(docType.getTitle())
@@ -116,71 +118,106 @@ public class DocTypeService {
                 .build();
     }
 
-
     //---내부 메서드 ---
-    //파일 저장
-    private void saveRequiredFields(DocType docType, List<String> requiredFields, List<String> exampleValues) {
-        List<RequiredField> fields = new ArrayList<>();
-        for (int i = 0; i < requiredFields.size(); i++) {
-            fields.add(RequiredField.builder()
-                    .docType(docType)
-                    .fieldName(requiredFields.get(i))
-                    .exampleValue(exampleValues.get(i))
-                    .build());
+    // 필수 항목 초기 저장 (null-safe)
+    private void saveRequiredFields(DocType docType, List<String> names, List<String> examples) {
+        List<RequiredField> fields = buildFieldPairs(docType, names, examples);
+        if (!fields.isEmpty()) {
+            requiredFieldRepository.saveAll(fields);
         }
-        requiredFieldRepository.saveAll(fields);
     }
 
-    private void deleteExistingFile(DocType docType) {
-        List<OriginalFile> existing = originalFileRepository.findByDocType(docType);
-        originalFileRepository.deleteAll(existing);
-    }
+    // 필수 항목 동기화: 삭제/추가 + 기존 예시값 업데이트
+    private void syncRequiredFields(DocType docType, List<String> newNames, List<String> newExamples) {
+        List<RequiredField> current = requiredFieldRepository.findByDocType(docType);
 
-    private void saveSingleFile(DocType docType, MultipartFile file) {
-        String fileUrl = fileStorageService.save(file);
-        OriginalFile originalFile = OriginalFile.builder()
-                .docType(docType)
-                .fileUrl(fileUrl)
-                .build();
-        originalFileRepository.save(originalFile);
-    }
+        // null-safe
+        newNames = newNames != null ? newNames : List.of();
+        newExamples = newExamples != null ? newExamples : List.of();
 
-    private void syncRequiredFields(DocType docType, List<String> newFields, List<String> newExamples) {
-        List<RequiredField> currentFields = requiredFieldRepository.findByDocType(docType);
-
-        Set<String> newFieldNames = new HashSet<>(newFields);
-        Map<String, String> newFieldMap = new HashMap<>();
-        for (int i = 0; i < newFields.size(); i++) {
-            newFieldMap.put(newFields.get(i), newExamples.get(i));
+        // 이름→예시값 매핑
+        Map<String, String> newMap = new HashMap<>();
+        for (int i = 0; i < newNames.size(); i++) {
+            String name = newNames.get(i);
+            String ex   = i < newExamples.size() ? newExamples.get(i) : null;
+            if (name != null && !name.isBlank()) newMap.put(name, ex);
         }
 
-        // 서류 내용
         // 삭제
-        List<RequiredField> toDelete = currentFields.stream()
-                .filter(f -> !newFieldNames.contains(f.getFieldName()))
+        Set<String> newNameSet = newMap.keySet();
+        List<RequiredField> toDelete = current.stream()
+                .filter(f -> !newNameSet.contains(f.getFieldName()))
                 .toList();
-        requiredFieldRepository.deleteAll(toDelete);
+        if (!toDelete.isEmpty()) requiredFieldRepository.deleteAll(toDelete);
 
-
-        // 추가
-        Set<String> existingNames = currentFields.stream()
-                .map(RequiredField::getFieldName)
-                .collect(Collectors.toSet());
+        // 추가 & 업데이트
+        Map<String, RequiredField> currentMap = current.stream()
+                .collect(Collectors.toMap(RequiredField::getFieldName, f -> f));
 
         List<RequiredField> toAdd = new ArrayList<>();
-        for (int i = 0; i < newFields.size(); i++) {
-            String name = newFields.get(i);
-            if (!existingNames.contains(name)) {
+        for (Map.Entry<String, String> e : newMap.entrySet()) {
+            String name = e.getKey();
+            String ex   = e.getValue();
+            RequiredField exist = currentMap.get(name);
+            if (exist == null) {
                 toAdd.add(RequiredField.builder()
                         .docType(docType)
                         .fieldName(name)
-                        .exampleValue(newExamples.get(i))
+                        .exampleValue(ex)
                         .build());
+            } else {
+                // 예시값 변경 반영
+                exist.setExampleValue(ex);
             }
         }
-        requiredFieldRepository.saveAll(toAdd);
+        if (!toAdd.isEmpty()) requiredFieldRepository.saveAll(toAdd);
+    }
+
+    // 파일 upsert: 기존 있으면 교체, 없으면 생성 (항상 1개만 유지)
+    // 파일 upsert: 기존은 UPDATE, 없으면 INSERT (항상 1개 유지 + UNIQUE 충돌 방지)
+    private void upsertFile(DocType docType, MultipartFile file) {
+        // 1) 새 파일을 먼저 디스크에 저장 (경로 확보)
+        String newUrl = fileStorageService.save(docType.getDocTypeId(), file);
+
+        try {
+            originalFileRepository.findByDocType(docType).ifPresentOrElse(old -> {
+                // 2-a) 기존 물리 파일 삭제하고, DB는 UPDATE만 수행
+                fileStorageService.deleteByUrl(old.getFileUrl());
+                old.setFileUrl(newUrl);          // UPDATE
+                // old.setUploadedAt(LocalDateTime.now()); // 필드 있다면 갱신
+                originalFileRepository.save(old);
+            }, () -> {
+                // 2-b) 기존 레코드가 없으면 INSERT
+                originalFileRepository.save(
+                        OriginalFile.builder()
+                                .docType(docType)
+                                .fileUrl(newUrl)
+                                .build()
+                );
+            });
+        } catch (RuntimeException ex) {
+            // DB 실패 시 방금 저장한 새 물리 파일 롤백 삭제 (고아 파일 방지)
+            fileStorageService.deleteByUrl(newUrl);
+            throw ex;
+        }
+    }
+
+    // 이름/예시 페어 빌드 (null-safe, 길이 불일치 허용)
+    private List<RequiredField> buildFieldPairs(DocType docType, List<String> names, List<String> examples) {
+        List<RequiredField> out = new ArrayList<>();
+        if (names == null || names.isEmpty()) return out;
+        int n = names.size();
+        int m = (examples == null) ? 0 : examples.size();
+        for (int i = 0; i < n; i++) {
+            String name = names.get(i);
+            if (name == null || name.isBlank()) continue;
+            String ex = i < m ? examples.get(i) : null;
+            out.add(RequiredField.builder()
+                    .docType(docType)
+                    .fieldName(name)
+                    .exampleValue(ex)
+                    .build());
+        }
+        return out;
     }
 }
-
-
-

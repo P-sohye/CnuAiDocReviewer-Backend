@@ -17,7 +17,7 @@ public class DocTypeEditRequestDTO {
     private String title;
 
     private List<@NotBlank String> requiredFields;
-    private List<@NotBlank String> exampleValues;
+    private List<String> exampleValues;
 
     private MultipartFile file; // 업로드 파일
 }

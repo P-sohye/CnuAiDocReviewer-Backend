@@ -1,4 +1,4 @@
-package com.cnu.docserver.docmanger.entity;
+package com.cnu.docserver.department.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
