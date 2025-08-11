@@ -3,6 +3,7 @@ package com.cnu.docserver.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -15,6 +16,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     @Bean
@@ -31,6 +33,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/api/admin/documents/**",
                                 "/uploads/**",
+                                "/api/admin/documents/*/file",
                                 "/api/admin/deadline/**",
                                 "/api/admin/departments/**"
                         ).permitAll()
@@ -50,7 +53,9 @@ public class SecurityConfig {
         config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         config.setAllowedHeaders(List.of("*")); // Content-Type, X-Requested-With 등
         config.setExposedHeaders(List.of("Set-Cookie")); // 필요 시
+        config.setExposedHeaders(List.of("Content-Disposition", "Set-Cookie"));
         config.setAllowCredentials(true);
+
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

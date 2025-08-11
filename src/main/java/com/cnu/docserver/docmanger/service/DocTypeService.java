@@ -11,9 +11,11 @@ import com.cnu.docserver.docmanger.repository.DocTypeRepository;
 import com.cnu.docserver.docmanger.repository.OriginalFileRepository;
 import com.cnu.docserver.docmanger.repository.RequiredFieldRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -87,16 +89,25 @@ public class DocTypeService {
                 .orElseThrow(() -> new IllegalArgumentException("부서를 찾을 수 없습니다."));
 
         return docTypeRepository.findByDepartment(department).stream()
-                .map(docType -> new DocTypeResponseDTO(
-                        docType.getDocTypeId(),
-                        docType.getTitle(),
-                        requiredFieldRepository.findByDocType(docType).stream()
-                                .map(RequiredField::getFieldName)
-                                .toList()
-                ))
+                .map(docType -> {
+
+                    String fileUrl = originalFileRepository.findByDocType(docType)
+                            .map(OriginalFile::getFileUrl)
+                            .orElse(null);
+
+                    List<String> fields = requiredFieldRepository.findByDocType(docType).stream()
+                            .map(RequiredField::getFieldName)
+                            .toList();
+
+                    return new DocTypeResponseDTO(
+                            docType.getDocTypeId(),
+                            docType.getTitle(),
+                            fields,
+                            fileUrl
+                    );
+                })
                 .toList();
     }
-
 
     //수정용 단건 조회
     @Transactional
@@ -118,6 +129,21 @@ public class DocTypeService {
                 .build();
     }
 
+    /** 문서 유형 ID로 단일 원본파일 조회 (문서당 파일 1개 정책) */
+    @Transactional
+    public Optional<OriginalFile> getOriginalFileByDocTypeId(Integer docTypeId) {
+        DocType docType = docTypeRepository.findById(docTypeId)
+                .orElseThrow(() -> new IllegalArgumentException("문서를 찾을 수 없습니다."));
+        return originalFileRepository.findByDocType(docType);
+    }
+
+    /** 저장소에서 파일 바이트 읽기 */
+    public byte[] readBytes(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "파일 URL이 없습니다.");
+        }
+        return fileStorageService.readBytes(fileUrl);
+    }
     //---내부 메서드 ---
     // 필수 항목 초기 저장 (null-safe)
     private void saveRequiredFields(DocType docType, List<String> names, List<String> examples) {

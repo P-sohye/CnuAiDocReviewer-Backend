@@ -9,10 +9,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.MediaType;
+import org.springframework.web.util.UriUtils;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.List;
 
 @RestController
@@ -67,4 +76,41 @@ public class DocTypeController {
     }
 
 
+    @GetMapping("/{docTypeId}/file")
+    @org.springframework.security.access.prepost.PreAuthorize("permitAll()")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Integer docTypeId) {
+        var file = docTypeService.getOriginalFileByDocTypeId(docTypeId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        byte[] bytes = docTypeService.readBytes(file.getFileUrl());
+        ByteArrayResource body = new ByteArrayResource(bytes);
+
+        // ▼ fileUrl에서 안전하게 파일명 추출 (URL 디코딩 + 마지막 세그먼트만)
+        String filename = extractFilenameFromUrl(file.getFileUrl());
+        if (filename == null || filename.isBlank()) {
+            filename = "document-" + docTypeId;
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename*=UTF-8''" + UriUtils.encode(filename, StandardCharsets.UTF_8))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM) // 필요시 확장자에 따라 바꿔도 OK
+                .contentLength(bytes.length)
+                .body(body);
+    }
+
+    // --- helper ---
+    private String extractFilenameFromUrl(String fileUrl) {
+        if (fileUrl == null) return null;
+        try {
+            // 예: "/uploads/3/%ED%95%9C%EA%B8%80%20양식.hwp"
+            String decoded = URLDecoder.decode(fileUrl, StandardCharsets.UTF_8);
+            // 마지막 세그먼트만 추출
+            return Paths.get(decoded).getFileName().toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }
+

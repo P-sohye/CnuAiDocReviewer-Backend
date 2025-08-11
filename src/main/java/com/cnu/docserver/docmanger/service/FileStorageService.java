@@ -52,4 +52,22 @@ public class FileStorageService {
             Files.deleteIfExists(target);
         } catch (IOException ignored) {}
     }
+    public byte[] readBytes(String fileUrl) {
+        if (fileUrl == null || !fileUrl.startsWith("/uploads/")) {
+            throw new IllegalArgumentException("잘못된 파일 URL: " + fileUrl);
+        }
+        try {
+            String relative = java.net.URLDecoder.decode(
+                    fileUrl.substring("/uploads/".length()),
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+            Path target = uploadDir.resolve(relative).normalize();
+            if (!target.startsWith(uploadDir)) {
+                throw new SecurityException("Invalid path traversal");
+            }
+            return Files.readAllBytes(target);
+        } catch (IOException e) {
+            throw new RuntimeException("파일 읽기 실패: " + e.getMessage(), e);
+        }
+    }
 }

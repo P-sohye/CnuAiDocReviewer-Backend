@@ -18,4 +18,8 @@ public class DocTypeResponseDTO {
     @Schema(description = "필수 항목 목록", example = "[\"이름\", \"학번\"]")
     private List<String> requiredFields;
 
+    @Schema(description = "최신 파일 URL(없으면 null)", example = "/files/doctype/1/original.pdf")
+    private String fileUrl;
+
+
 }
