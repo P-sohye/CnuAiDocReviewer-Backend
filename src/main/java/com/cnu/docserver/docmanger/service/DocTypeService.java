@@ -3,6 +3,7 @@ package com.cnu.docserver.docmanger.service;
 import com.cnu.docserver.docmanger.dto.DocTypeEditResponseDTO;
 import com.cnu.docserver.docmanger.dto.DocTypeResponseDTO;
 import com.cnu.docserver.department.entity.Department;
+import com.cnu.docserver.docmanger.dto.RequiredFieldDTO;
 import com.cnu.docserver.docmanger.entity.DocType;
 import com.cnu.docserver.docmanger.entity.OriginalFile;
 import com.cnu.docserver.docmanger.entity.RequiredField;
@@ -129,6 +130,25 @@ public class DocTypeService {
                 .build();
     }
 
+    @Transactional
+    public List<RequiredFieldDTO> getRequiredFields(Integer docTypeId) {
+        DocType docType = docTypeRepository.findById(docTypeId)
+                .orElseThrow(() -> new IllegalArgumentException("문서를 찾을 수 없습니다."));
+
+        // 정렬 컬럼이 없으면 findByDocType() 그대로 사용
+        List<RequiredField> fields = requiredFieldRepository.findByDocType(docType);
+
+        return fields.stream()
+                .map(f -> RequiredFieldDTO.builder()
+                        .requiredFieldId(f.getRequiredFieldId()) // PK
+                        .label(f.getFieldName())                 // 화면 라벨
+                        .example(f.getExampleValue())            // 예시값
+                        .required(true)                          // 컬럼 없으면 true 고정
+                        .orderNo(null)                           // 정렬 없으면 null
+                        .build())
+                .toList();
+    }
+
     /** 문서 유형 ID로 단일 원본파일 조회 (문서당 파일 1개 정책) */
     @Transactional
     public Optional<OriginalFile> getOriginalFileByDocTypeId(Integer docTypeId) {
@@ -144,6 +164,10 @@ public class DocTypeService {
         }
         return fileStorageService.readBytes(fileUrl);
     }
+
+
+
+
     //---내부 메서드 ---
     // 필수 항목 초기 저장 (null-safe)
     private void saveRequiredFields(DocType docType, List<String> names, List<String> examples) {
