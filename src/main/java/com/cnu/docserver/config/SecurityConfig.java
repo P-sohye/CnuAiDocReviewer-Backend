@@ -39,6 +39,7 @@ public class SecurityConfig {
                                 "/api/admin/deadline/**",
                                 "/api/admin/departments/**"
                         ).permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form.disable());
