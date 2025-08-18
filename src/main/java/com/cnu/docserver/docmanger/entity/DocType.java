@@ -19,6 +19,7 @@ public class DocType {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "doc_type_id")
     private Integer docTypeId;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,7 +35,7 @@ public class DocType {
     @Column(nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-    @OneToOne(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private OriginalFile originalFile;
 
     @OneToMany(mappedBy = "docType", cascade = CascadeType.ALL, orphanRemoval = true)

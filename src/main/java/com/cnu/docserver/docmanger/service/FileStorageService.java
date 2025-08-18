@@ -14,9 +14,19 @@ public class FileStorageService {
 
     private final Path uploadDir = Paths.get("uploads");
 
+    // 문서유형 파일 (기존)
     public String save(Integer docTypeId, MultipartFile file) {
+        return saveInto(uploadDir.resolve("doctype").resolve(String.valueOf(docTypeId)), "/uploads/doctype/" + docTypeId + "/", file);
+    }
+
+    // 제출 파일 (신규)
+    public String saveSubmission(Integer submissionId, MultipartFile file) {
+        return saveInto(uploadDir.resolve("submissions").resolve(String.valueOf(submissionId)), "/uploads/submissions/" + submissionId + "/", file);
+    }
+
+    // 공통 내부 로직
+    private String saveInto(Path dir, String urlPrefix, MultipartFile file) {
         try {
-            Path dir = uploadDir.resolve(String.valueOf(docTypeId));
             Files.createDirectories(dir);
 
             String original = Optional.ofNullable(file.getOriginalFilename()).orElse("unknown");
@@ -26,14 +36,12 @@ public class FileStorageService {
             if (original.length() > 255) original = original.substring(original.length() - 255);
 
             Path target = dir.resolve(original).normalize();
-            // dir 밖으로 벗어나지 못하게 가드
             if (!target.startsWith(dir)) throw new SecurityException("Invalid path");
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
 
-            // URL 인코딩(공백/한글 안전)
             String encoded = java.net.URLEncoder.encode(original, java.nio.charset.StandardCharsets.UTF_8)
                     .replace("+", "%20");
-            return "/uploads/" + docTypeId + "/" + encoded;
+            return urlPrefix + encoded;
         } catch (IOException e) {
             throw new RuntimeException("파일 저장 실패: " + e.getMessage(), e);
         }

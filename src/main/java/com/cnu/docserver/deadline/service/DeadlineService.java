@@ -45,6 +45,24 @@ public class DeadlineService {
                 })
                 .toList();
     }
+    //단건 조회
+    @Transactional
+    public DeadlineStatusDTO getDeadlineByDocTypeId(Integer docTypeId) {
+        DocType docType = docTypeRepository.findById(docTypeId)
+                .orElseThrow(() -> new RuntimeException("문서를 찾을 수 없습니다."));
+        return deadlineRepository.findByDocType(docType)
+                .map(d -> DeadlineStatusDTO.builder()
+                        .docTypeId(docType.getDocTypeId())
+                        .title(docType.getTitle())
+                        .deadline(d.getDeadline())
+                        .build())
+                .orElse(DeadlineStatusDTO.builder()
+                        .docTypeId(docType.getDocTypeId())
+                        .title(docType.getTitle())
+                        .deadline(null)
+                        .build());
+    }
+
 
     //등록 + 수정 registerOrUpdateDeadline()
     @Transactional
