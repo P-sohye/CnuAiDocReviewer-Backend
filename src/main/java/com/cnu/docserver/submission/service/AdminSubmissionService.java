@@ -2,6 +2,7 @@ package com.cnu.docserver.submission.service;
 
 import com.cnu.docserver.department.entity.Department;
 import com.cnu.docserver.department.repository.DepartmentRepository;
+import com.cnu.docserver.docmanger.service.FileStorageService;
 import com.cnu.docserver.submission.dto.HistoryDTO;
 import com.cnu.docserver.submission.dto.SubmissionDetailDTO;
 import com.cnu.docserver.submission.dto.SubmissionSummaryDTO;
@@ -16,12 +17,16 @@ import com.cnu.docserver.submission.repository.SubmissionRepository;
 import com.cnu.docserver.user.entity.Admin;
 import com.cnu.docserver.user.entity.Member;
 import com.cnu.docserver.user.repository.AdminRepository;
+import io.micrometer.common.lang.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.List;
 
 @Service
@@ -33,21 +38,21 @@ public class AdminSubmissionService {
     private final AdminRepository adminRepository;
     private final SubmissionFileRepository submissionFileRepository; // ★ 추가
     private final DepartmentRepository departmentRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public SubmissionDetailDTO getDetail(Integer id) {
-        Submission s = submissionRepository.findById(id)
+
+        Submission s = submissionRepository.findDetailById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));
-
-
 
         // 파일 URL / 파일명
         String fileUrl = submissionFileRepository.findBySubmission(s)
                 .map(SubmissionFile::getFileUrl)
                 .orElse(null);
-        String fileName = extractFileName(fileUrl);
+        String fileName = extractFileName(fileUrl); // ← 제목으로 쓸 파일명
 
-        // 문서 유형명 (엔티티 필드명에 맞게)
+        // 문서 유형명
         String docTypeName = (s.getDocType() != null ? s.getDocType().getTitle() : null);
 
         // 히스토리
@@ -62,16 +67,19 @@ public class AdminSubmissionService {
                 ))
                 .toList();
 
-        // 학생 정보 (엔티티 구조에 맞춰 안전하게 꺼내기)
-        String studentId   = s.getStudent() == null ? null : s.getStudent().getStudentId();
+        // 학생 정보
         String studentName = (s.getStudent() != null && s.getStudent().getMember() != null)
                 ? s.getStudent().getMember().getName() : null;
+
+
+        String memberId = (s.getStudent() != null && s.getStudent().getMember() != null)
+                ? s.getStudent().getMember().getMemberId() : null;
 
         return new SubmissionDetailDTO(
                 s.getSubmissionId(),
                 s.getStatus() == null ? null : s.getStatus().name(),
                 s.getSubmittedAt() == null ? null : s.getSubmittedAt().toString(),
-                studentId,
+                memberId,
                 studentName,
                 fileUrl,
                 docTypeName,
@@ -79,6 +87,7 @@ public class AdminSubmissionService {
                 history
         );
     }
+
 
     private String resolveAdminName(Admin admin) {
         if (admin == null) return "학생/시스템";
@@ -89,23 +98,37 @@ public class AdminSubmissionService {
         return admin.getAdminId() != null ? admin.getAdminId().toString() : "관리자";
     }
 
-    private String extractFileName(String fileUrl) {
-        if (fileUrl == null || fileUrl.isBlank()) return null;
-        int idx = Math.max(fileUrl.lastIndexOf('/'), fileUrl.lastIndexOf('\\'));
-        return (idx >= 0 && idx < fileUrl.length() - 1) ? fileUrl.substring(idx + 1) : fileUrl;
-    }
+    private String extractFileName(String url) {
+        if (url == null || url.isBlank()) return null;
 
+        // ?query 제거
+        String base = url.split("\\?")[0];
+
+        // 마지막 경로 토큰
+        int idx = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        String raw = (idx >= 0 && idx < base.length() - 1) ? base.substring(idx + 1) : base;
+
+        // 퍼센트 인코딩 디코딩
+        try {
+            return URLDecoder.decode(raw, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return raw; // 잘못 인코딩된 경우 원본 유지
+        }
+    }
     @Transactional(readOnly = true)
-    public List<SubmissionSummaryDTO> listAdminQueue(Integer departmentId) {
-        var statuses = List.of(SubmissionStatus.SUBMITTED, SubmissionStatus.UNDER_REVIEW); // 현재 관리자 대기
+    public List<SubmissionSummaryDTO> listAdminQueue(Integer departmentId, @Nullable List<SubmissionStatus> statuses) {
         Department dept = departmentRepository.findById(departmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."));
 
-        return submissionRepository
-                .findByDocType_DepartmentAndStatusInOrderBySubmittedAtDesc(dept, statuses)
-                .stream()
-                .map(this::toSummary)
-                .toList();
+        List<Submission> list;
+        if (statuses == null || statuses.isEmpty()) {
+            // ★ 전체 상태
+            list = submissionRepository.findByDocType_DepartmentOrderBySubmittedAtDesc(dept);
+        } else {
+            list = submissionRepository.findByDocType_DepartmentAndStatusInOrderBySubmittedAtDesc(dept, statuses);
+        }
+
+        return list.stream().map(this::toSummary).toList();
     }
 
 
@@ -171,5 +194,27 @@ public class AdminSubmissionService {
                 .fileUrl(fileUrl)
                 .submittedAt(s.getSubmittedAt() == null ? null : s.getSubmittedAt().toString())
                 .build();
+    }
+
+    public record FileDownload(String filename, byte[] data) {}
+
+    @Transactional(readOnly = true)
+    public FileDownload downloadFile(Integer submissionId) {
+        Submission s = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));
+
+        String fileUrl = submissionFileRepository.findBySubmission(s)
+                .map(SubmissionFile::getFileUrl)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출 파일이 없습니다."));
+
+        byte[] bytes = fileStorageService.readBytes(fileUrl);
+
+        // URL에서 안전하게 파일명 추출 (디코딩 + 마지막 세그먼트)
+        String decoded = URLDecoder.decode(fileUrl, StandardCharsets.UTF_8);
+        String filename = Paths.get(decoded).getFileName().toString();
+        if (filename == null || filename.isBlank()) {
+            filename = "submission-" + submissionId;
+        }
+        return new FileDownload(filename, bytes);
     }
 }

@@ -6,7 +6,7 @@ public record SubmissionDetailDTO(
         Integer submissionId,
         String status,
         String submittedAt,
-        String studentId,
+        String memberId,
         String studentName,
         String fileUrl,
         String docTypeName,
