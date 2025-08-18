@@ -66,9 +66,9 @@ public class SubmissionService {
 
     // === 1) 최초 제출 ===
     @Transactional
-    public SubmissionSummaryDTO create(Integer docTypeId, String fieldsJson, MultipartFile file, HttpSession session) {
+    public SubmissionSummaryDTO create(Integer docTypeId, String fieldsJson, MultipartFile file) {
         // 1) 로그인 학생 조회
-        String studentId = currentStudentId(session);
+        String studentId = currentStudentId();
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 정보를 찾을 수 없습니다."));
 
@@ -101,8 +101,8 @@ public class SubmissionService {
         submission.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(submission);
 
-        // 8) 이력 기록: CREATE (학생 제출)
-        writeHistory(submission, null, HistoryAction.CREATE, "학생 제출");
+        // 8) 이력 기록:  SUBMITTED (학생 제출)
+        writeHistory(submission, null, HistoryAction. SUBMITTED, "학생 제출");
 
         // 9) 서버가 곧바로 UNDER_REVIEW로 전환
         submission.setStatus(SubmissionStatus.UNDER_REVIEW);
@@ -115,16 +115,22 @@ public class SubmissionService {
     @Transactional
     public SubmissionSummaryDTO update(Integer submissionId, String fieldsJson, MultipartFile file) {
         Submission s = requireSubmission(submissionId);
-
         mustBeOneOf(s, SubmissionStatus.DRAFT, SubmissionStatus.REJECTED);
+
+        boolean changed = false;
 
         if (file != null && !file.isEmpty()) {
             upsertFile(s, file);
+            changed = true;
         }
         if (fieldsJson != null && !fieldsJson.isBlank()) {
             upsertFieldValues(s, parseFields(fieldsJson), s.getDocType());
+            changed = true;
         }
-        // 상태는 여기서 바꾸지 않음(임시 저장 성격)
+
+        if (changed) {
+            writeHistory(s, null, HistoryAction.MODIFIED, "학생 수정(임시 저장)");
+        }
         return toSummary(s);
     }
 
@@ -133,7 +139,6 @@ public class SubmissionService {
     @Transactional
     public SubmissionSummaryDTO submit(Integer submissionId, SubmitRequestDTO body) {
         Submission s = requireSubmission(submissionId);
-
         mustBeOneOf(s, SubmissionStatus.DRAFT, SubmissionStatus.REJECTED);
 
         if (body == null || body.getMode() == null) {
@@ -143,15 +148,20 @@ public class SubmissionService {
         // 마감 체크
         ensureNotPastDeadline(s.getDocType());
 
+        // 이전 상태를 보고 이력 액션 결정
+        SubmissionStatus prev = s.getStatus();
+        HistoryAction historyAction =
+                (prev == SubmissionStatus.REJECTED) ? HistoryAction.MODIFIED : HistoryAction.SUBMITTED;
+
         // 제출 전이
         s.setStatus(SubmissionStatus.SUBMITTED);
         s.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(s);
 
-        String memo = (body.getMode() == SubmitRequestDTO.SubmitMode.FINAL)
-                ? "학생 최종제출(FINAL)"
-                : "학생 바로제출(DIRECT, AI 검증 건너뜀)";
-        writeHistory(s, null, HistoryAction.CREATE, "학생 재제출");
+        String memo = switch (body.getMode()) {
+            case FINAL -> (prev == SubmissionStatus.REJECTED) ? "학생 재제출(FINAL)" : "학생 최종제출(FINAL)";
+            case DIRECT -> (prev == SubmissionStatus.REJECTED) ? "학생 재제출(DIRECT)" : "학생 바로제출(DIRECT)";
+        };
 
         // 즉시 관리자 검토 대기
         s.setStatus(SubmissionStatus.UNDER_REVIEW);
@@ -164,15 +174,16 @@ public class SubmissionService {
     // ───────────────────────── 내부 유틸 ─────────────────────────
 
     // 로그인 학생 검증
-    private String currentStudentId(HttpSession session) {
-        Object currentUser = session.getAttribute("currentUser");
-        if(!(currentUser instanceof Member member)) {
+    private String currentStudentId() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Member m)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
-        return studentRepository.findByMember(member)
+        return studentRepository.findByMember(m)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 정보를 찾을 수 없습니다."))
                 .getStudentId();
     }
+
 
     //  마감일 검증: deadline이 없거나(null) 오늘이 마감일보다 늦지 않으면(<=) 통과
     private void ensureNotPastDeadline(DocType docType) {
@@ -243,49 +254,71 @@ public class SubmissionService {
             fileStorageService.deleteByUrl(url);
         }catch(Exception ignored){}
     }
+    private void upsertFieldValues(Submission submission, List<FieldValueInputDTO> inputs, DocType docType) {
 
-    private void upsertFieldValues(Submission submission, List<FieldValueInputDTO> inputs, DocType docType ){
-
+        // 기존 값 전체 삭제 후 다시 저장 (덮어쓰기 정책)
         submissionFieldValueRepository.deleteBySubmission(submission);
-        if (inputs ==null || inputs.isEmpty()) return;
+        if (inputs == null || inputs.isEmpty()) return;
 
+        // 해당 문서 유형의 필수항목 정의 불러오기
         List<RequiredField> defined = requiredFieldRepository.findByDocType(docType);
-        Map<Integer, RequiredField> byId = new HashMap<>();
+
+        // field_name(=RequiredField.fieldName) → RequiredField 매핑
         Map<String, RequiredField> byName = new HashMap<>();
         for (RequiredField rf : defined) {
-            byId.put(rf.getRequiredFieldId(), rf);
-            if (rf.getFieldName() != null) byName.put(rf.getFieldName(), rf);
+            String name = rf.getFieldName();
+            if (name != null && !name.isBlank()) {
+                byName.put(name, rf);
+            }
         }
 
         List<SubmissionFieldValue> rows = new ArrayList<>();
         for (FieldValueInputDTO in : inputs) {
-            RequiredField rf = null;
-            if (in.getRequiredFieldId() != null) {
-                rf = byId.get(in.getRequiredFieldId());
-            } else if (in.getLabel() != null){
-                rf = byName.get(in.getLabel());
+            // 1) 필수 검증: label(field_name), value
+            String label = (in.getLabel() == null) ? null : in.getLabel().trim();
+            if (label == null || label.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "field_name(label)은 필수입니다.");
             }
+            if (in.getValue() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "value는 필수입니다.");
+            }
+
+            // 2) field_name 기준 매칭 (정의된 필드가 있으면 FK 연결)
+            RequiredField rf = byName.get(label);
 
             rows.add(SubmissionFieldValue.builder()
                     .submission(submission)
-                    .requiredField(rf)
-                    .fieldName(in.getLabel())
+                    .requiredField(rf)     // 매칭되면 FK 세팅, 없으면 null (FK가 NOT NULL이면 여기서 400 던지세요)
+                    .fieldName(label)      // DB column field_name (NOT NULL)
                     .fieldValue(in.getValue())
                     .build());
         }
+
         submissionFieldValueRepository.saveAll(rows);
     }
 
     private List<FieldValueInputDTO> parseFields(String fieldsJson) {
         try {
             if (fieldsJson == null || fieldsJson.isBlank()) return Collections.emptyList();
-            return objectMapper.readValue(fieldsJson, new TypeReference<List<FieldValueInputDTO>>() {});
+            String s = fieldsJson.trim();
+
+            // 바깥 따옴표로 감싼 경우 벗겨내기
+            if ((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'"))) {
+                s = s.substring(1, s.length() - 1).trim();
+            }
+
+            // 단일 객체 {…} 로 오면 허용
+            if (s.startsWith("{") && s.endsWith("}")) {
+                FieldValueInputDTO one = objectMapper.readValue(s, FieldValueInputDTO.class);
+                return List.of(one);
+            }
+
+            // 기본: 배열
+            return objectMapper.readValue(s, new TypeReference<List<FieldValueInputDTO>>() {});
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fieldsJson 파싱 실패", e);
         }
     }
-
-
 
 }
 

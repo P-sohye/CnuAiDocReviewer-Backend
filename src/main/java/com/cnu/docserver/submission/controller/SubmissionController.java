@@ -45,11 +45,9 @@ public class SubmissionController {
             @RequestParam(required = false) String fieldsJson,
 
             @Parameter(description = "제출 파일", required = true)
-            @RequestPart("file") MultipartFile file,
-
-            HttpSession session
+            @RequestPart("file") MultipartFile file
     ) {
-        return submissionService.create(docTypeId, fieldsJson, file, session);
+        return submissionService.create(docTypeId, fieldsJson, file);
     }
     @PreAuthorize("hasRole('STUDENT')")
     @Operation(

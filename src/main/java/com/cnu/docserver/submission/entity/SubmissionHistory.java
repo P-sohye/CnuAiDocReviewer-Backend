@@ -26,12 +26,13 @@ public class SubmissionHistory {
     @JoinColumn(name = "submission_id", nullable = false)
     private Submission submission;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "admin_id", referencedColumnName = "admin_id", nullable = false)
+
+    @ManyToOne(optional = true)
+    @JoinColumn(name = "admin_id", nullable = true)
     private Admin admin;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "action", nullable = false, length = 40)
+    @Column(name = "action", nullable = true, length = 40)
     private HistoryAction action;
 
     @Column(name = "memo")

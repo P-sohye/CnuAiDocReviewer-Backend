@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 public class Submission {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "submission_id")
     private Integer submissionId;
 
