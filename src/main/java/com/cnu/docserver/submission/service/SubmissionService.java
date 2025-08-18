@@ -101,11 +101,12 @@ public class SubmissionService {
         submission.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(submission);
 
+
         // 8) 이력 기록:  SUBMITTED (학생 제출)
         writeHistory(submission, null, HistoryAction. SUBMITTED, "학생 제출");
 
         // 9) 서버가 곧바로 UNDER_REVIEW로 전환
-        submission.setStatus(SubmissionStatus.UNDER_REVIEW);
+        submission.setStatus(SubmissionStatus.BOT_REVIEW);
         submissionRepository.save(submission);
 
         return toSummary(submission);
@@ -139,7 +140,8 @@ public class SubmissionService {
     @Transactional
     public SubmissionSummaryDTO submit(Integer submissionId, SubmitRequestDTO body) {
         Submission s = requireSubmission(submissionId);
-        mustBeOneOf(s, SubmissionStatus.DRAFT, SubmissionStatus.REJECTED);
+        // 재제출은 REJECTED/NEEDS_FIX에서도 가능하도록 하는 게 자연스러워요.
+        mustBeOneOf(s, SubmissionStatus.DRAFT, SubmissionStatus.REJECTED, SubmissionStatus.NEEDS_FIX);
 
         if (body == null || body.getMode() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "제출 모드가 필요합니다.");
@@ -148,29 +150,35 @@ public class SubmissionService {
         // 마감 체크
         ensureNotPastDeadline(s.getDocType());
 
-        // 이전 상태를 보고 이력 액션 결정
         SubmissionStatus prev = s.getStatus();
-        HistoryAction historyAction =
-                (prev == SubmissionStatus.REJECTED) ? HistoryAction.MODIFIED : HistoryAction.SUBMITTED;
 
-        // 제출 전이
+        // 1) 학생 제출 접수(시각 기록)
         s.setStatus(SubmissionStatus.SUBMITTED);
         s.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(s);
 
+        // 2) 히스토리 남기기 (학생 제출/재제출 구분)
         String memo = switch (body.getMode()) {
-            case FINAL -> (prev == SubmissionStatus.REJECTED) ? "학생 재제출(FINAL)" : "학생 최종제출(FINAL)";
-            case DIRECT -> (prev == SubmissionStatus.REJECTED) ? "학생 재제출(DIRECT)" : "학생 바로제출(DIRECT)";
+            case FINAL  -> (prev == SubmissionStatus.REJECTED || prev == SubmissionStatus.NEEDS_FIX)
+                    ? "학생 재제출(FINAL)" : "학생 최종제출(FINAL)";
+            case DIRECT -> (prev == SubmissionStatus.REJECTED || prev == SubmissionStatus.NEEDS_FIX)
+                    ? "학생 재제출(DIRECT)" : "학생 바로제출(DIRECT)";
         };
+        writeHistory(s, null, HistoryAction.SUBMITTED, memo);
 
-        // 즉시 관리자 검토 대기
-        s.setStatus(SubmissionStatus.UNDER_REVIEW);
-        submissionRepository.save(s);
+        // 3) 챗봇 단계로 보낼지 여부
+        if (body.getMode() == SubmitRequestDTO.SubmitMode.DIRECT) {
+            // 검증 건너뜀 → 관리자 대기 큐 유지(SUBMITTED 유지)
+            // 아무 것도 안 함
+        } else {
+            // 기본: 챗봇 검수로 전환
+            s.setStatus(SubmissionStatus.BOT_REVIEW);
+            submissionRepository.save(s);
+        }
 
-        // TODO: 내부 큐/이벤트로 봇 검토 트리거
+        // (참고) 챗봇 검수 통과 시: BOT API에서 BOT_REVIEW -> SUBMITTED 로 바꿔 관리자 큐에 올림
         return toSummary(s);
     }
-
     // ───────────────────────── 내부 유틸 ─────────────────────────
 
     // 로그인 학생 검증

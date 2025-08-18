@@ -1,5 +1,7 @@
 package com.cnu.docserver.submission.service;
 
+import com.cnu.docserver.department.entity.Department;
+import com.cnu.docserver.department.repository.DepartmentRepository;
 import com.cnu.docserver.submission.dto.HistoryDTO;
 import com.cnu.docserver.submission.dto.SubmissionDetailDTO;
 import com.cnu.docserver.submission.dto.SubmissionSummaryDTO;
@@ -30,11 +32,14 @@ public class AdminSubmissionService {
     private final SubmissionHistoryRepository submissionHistoryRepository;
     private final AdminRepository adminRepository;
     private final SubmissionFileRepository submissionFileRepository; // ★ 추가
+    private final DepartmentRepository departmentRepository;
 
     @Transactional(readOnly = true)
     public SubmissionDetailDTO getDetail(Integer id) {
         Submission s = submissionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));
+
+
 
         // 파일 URL / 파일명
         String fileUrl = submissionFileRepository.findBySubmission(s)
@@ -91,20 +96,30 @@ public class AdminSubmissionService {
     }
 
     @Transactional(readOnly = true)
-    public List<SubmissionSummaryDTO> listByStatus(SubmissionStatus status) {
-        return submissionRepository.findByStatusOrderBySubmittedAtAsc(status)
-                .stream().map(this::toSummary).toList();
+    public List<SubmissionSummaryDTO> listAdminQueue(Integer departmentId) {
+        var statuses = List.of(SubmissionStatus.SUBMITTED, SubmissionStatus.UNDER_REVIEW); // 현재 관리자 대기
+        Department dept = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."));
+
+        return submissionRepository
+                .findByDocType_DepartmentAndStatusInOrderBySubmittedAtDesc(dept, statuses)
+                .stream()
+                .map(this::toSummary)
+                .toList();
     }
 
+
     @Transactional
-    public SubmissionSummaryDTO approve(Integer submissionId, Member adminMember, String memo) {
+    public SubmissionSummaryDTO approve(Integer submissionId, Member adminMember) {
         Submission s = requireReviewable(submissionId);
         Admin admin = adminRepository.findByMember(adminMember)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 없습니다."));
 
+
         s.setStatus(SubmissionStatus.APPROVED);
         submissionRepository.save(s);
-        saveHistory(s, admin, HistoryAction.APPROVED, memo == null ? "관리자 승인" : memo);
+
+        saveHistory(s, admin, HistoryAction.APPROVED, "승인 처리되었습니다.");
 
         return toSummary(s);
     }
@@ -123,6 +138,7 @@ public class AdminSubmissionService {
     }
 
     // --- helpers ---
+
     private Submission requireReviewable(Integer id) {
         Submission s = submissionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));

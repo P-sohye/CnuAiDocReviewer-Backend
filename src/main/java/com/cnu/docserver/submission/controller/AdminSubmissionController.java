@@ -23,9 +23,9 @@ public class AdminSubmissionController {
     private final AdminSubmissionService adminSubmissionService;
 
     // 검토 대기 목록
-    @GetMapping("/under-review")
-    public List<SubmissionSummaryDTO> listUnderReview() {
-        return adminSubmissionService.listByStatus(SubmissionStatus.UNDER_REVIEW);
+    @GetMapping
+    public List<SubmissionSummaryDTO> listForAdmin(@RequestParam Integer departmentId) {
+        return adminSubmissionService.listAdminQueue(departmentId);
     }
 
     // 상세 조회 (필요시)
@@ -36,12 +36,10 @@ public class AdminSubmissionController {
 
     // 승인
     @PostMapping("/{id}/approve")
-    public SubmissionSummaryDTO approve(@PathVariable Integer id, @RequestBody(required = false) AdminDecisionRequestDTO body) {
+    public SubmissionSummaryDTO approve(@PathVariable Integer id) {
         Member adminMember = (Member) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        String memo = (body != null && body.getMemo()!=null) ? body.getMemo() : "관리자 승인";
-        return adminSubmissionService.approve(id, adminMember, memo);
+        return adminSubmissionService.approve(id, adminMember); // memo 인자 제거
     }
-
     // 반려
     @PostMapping("/{id}/reject")
     public SubmissionSummaryDTO reject(@PathVariable Integer id, @RequestBody AdminDecisionRequestDTO body) {
