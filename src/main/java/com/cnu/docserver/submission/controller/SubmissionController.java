@@ -36,6 +36,8 @@ public class SubmissionController {
             @ApiResponse(responseCode = "400", description = "유효성 오류(파일 누락/마감 초과 등)"),
             @ApiResponse(responseCode = "401", description = "인증 필요")
     })
+
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public SubmissionSummaryDTO create(
             @Parameter(description = "문서 유형 ID", required = true, example = "101")
@@ -49,6 +51,16 @@ public class SubmissionController {
     ) {
         return submissionService.create(docTypeId, fieldsJson, file);
     }
+
+
+    @PreAuthorize("hasRole('STUDENT')")
+    @GetMapping("/{submissionId}")
+    public SubmissionSummaryDTO getOne(@PathVariable Integer submissionId) {
+        return submissionService.getSummary(submissionId); // 또는 getDetail로 매핑
+    }
+
+
+
     @PreAuthorize("hasRole('STUDENT')")
     @Operation(
             summary = "반려 후 수정(임시저장)",

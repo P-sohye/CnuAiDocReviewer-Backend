@@ -181,6 +181,14 @@ public class SubmissionService {
     }
     // ───────────────────────── 내부 유틸 ─────────────────────────
 
+    @Transactional(readOnly = true)
+    public SubmissionSummaryDTO getSummary(Integer submissionId) {
+        // 소유권 체크가 필요하면 requireMySubmission(...)으로 바꾸세요.
+        Submission s = requireSubmission(submissionId);
+        return toSummary(s);
+    }
+
+
     // 로그인 학생 검증
     private String currentStudentId() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -231,6 +239,8 @@ public class SubmissionService {
         return submissionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));
     }
+
+
 
     private void mustBeOneOf(Submission s, SubmissionStatus... allowed) {
         for (SubmissionStatus a : allowed) if (s.getStatus() == a) return;

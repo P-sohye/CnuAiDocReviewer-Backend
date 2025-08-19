@@ -43,7 +43,7 @@ public class StudentLookupController {
 
     //부서별 문서 목록
     @PreAuthorize("hasRole('STUDENT')")
-    @GetMapping("/department/{departmentId}/doc-types")
+    @GetMapping("/departments/{departmentId}/doc-types")
     public List<DocTypeResponseDTO> getDocTypes(@PathVariable Integer departmentId) {
         return docTypeService.getDocTypesByDepartment(departmentId);
     }
