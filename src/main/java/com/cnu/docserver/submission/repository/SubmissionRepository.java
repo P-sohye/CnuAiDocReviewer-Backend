@@ -3,6 +3,7 @@ package com.cnu.docserver.submission.repository;
 import com.cnu.docserver.department.entity.Department;
 import com.cnu.docserver.submission.entity.Submission;
 import com.cnu.docserver.submission.enums.SubmissionStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -16,11 +17,15 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
             Department department,
             List<SubmissionStatus> statuses
     );
-
-    // 신규: 상태 제한 없이 전부 (부서 기준 최신순)
     List<Submission> findByDocType_DepartmentOrderBySubmittedAtDesc(Department department);
 
+    // ▶ 학생 본인 최신 제출 N개
+    List<Submission> findByStudent_StudentIdOrderBySubmissionIdDesc(
+            String studentId, Pageable pageable);
 
+    // ▶ 상태 필터 포함
+    List<Submission> findByStudent_StudentIdAndStatusInOrderBySubmissionIdDesc(
+            String studentId, List<SubmissionStatus> statuses, Pageable pageable);
     @Query("""
       select s
       from Submission s

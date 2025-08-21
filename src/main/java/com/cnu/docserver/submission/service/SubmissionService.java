@@ -6,6 +6,7 @@ import com.cnu.docserver.docmanger.entity.RequiredField;
 import com.cnu.docserver.docmanger.repository.DocTypeRepository;
 import com.cnu.docserver.docmanger.repository.RequiredFieldRepository;
 import com.cnu.docserver.docmanger.service.FileStorageService;
+import com.cnu.docserver.ocr.SubmissionReviewOrchestrator;
 import com.cnu.docserver.submission.dto.FieldValueInputDTO;
 import com.cnu.docserver.submission.dto.SubmissionSummaryDTO;
 import com.cnu.docserver.submission.dto.SubmitRequestDTO;
@@ -60,6 +61,7 @@ public class SubmissionService {
     private final SubmissionFieldValueRepository submissionFieldValueRepository;
     private final SubmissionHistoryRepository submissionHistoryRepository;
 
+    private final SubmissionReviewOrchestrator submissionReviewOrchestrator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -108,10 +110,12 @@ public class SubmissionService {
         // 9) 서버가 곧바로 UNDER_REVIEW로 전환
         submission.setStatus(SubmissionStatus.BOT_REVIEW);
         submissionRepository.save(submission);
-
+        submissionReviewOrchestrator.runBotReview(submission.getSubmissionId());
         return toSummary(submission);
     }
-
+    public String getCurrentStudentId() {
+        return currentStudentId();
+    }
     // === 2) 반려 후 수정(덮어쓰기) ===
     @Transactional
     public SubmissionSummaryDTO update(Integer submissionId, String fieldsJson, MultipartFile file) {

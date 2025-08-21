@@ -60,6 +60,8 @@ public class FileStorageService {
             Files.deleteIfExists(target);
         } catch (IOException ignored) {}
     }
+
+    /** FastAPI 전송용: 저장 파일 바이트 */
     public byte[] readBytes(String fileUrl) {
         if (fileUrl == null || !fileUrl.startsWith("/uploads/")) {
             throw new IllegalArgumentException("잘못된 파일 URL: " + fileUrl);
@@ -76,6 +78,18 @@ public class FileStorageService {
             return Files.readAllBytes(target);
         } catch (IOException e) {
             throw new RuntimeException("파일 읽기 실패: " + e.getMessage(), e);
+        }
+    }
+
+    /** FastAPI 전송용: 사용자 친화적 파일명 추출 */
+    public String getFilename(String fileUrl) {
+        if (fileUrl == null) return "upload.bin";
+        int i = fileUrl.lastIndexOf('/');
+        String enc = (i >= 0 ? fileUrl.substring(i + 1) : fileUrl);
+        try {
+            return java.net.URLDecoder.decode(enc, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignore) {
+            return enc;
         }
     }
 }
