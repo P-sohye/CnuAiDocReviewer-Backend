@@ -4,6 +4,8 @@ import com.cnu.docserver.submission.enums.SubmissionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
+import java.util.Collections;
+
 @Getter
 @Setter
 @AllArgsConstructor
@@ -24,4 +26,5 @@ public class SubmissionSummaryDTO {
 
     @Schema(description = "제출 시각(ISO8601)")
     private String submittedAt;
+
 }

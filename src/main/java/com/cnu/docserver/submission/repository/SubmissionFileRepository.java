@@ -9,5 +9,7 @@ import java.util.Optional;
 
 public interface SubmissionFileRepository extends JpaRepository<SubmissionFile, Integer> {
     Optional<SubmissionFile> findBySubmission(Submission submission);
+    Optional<SubmissionFile> findTopBySubmissionOrderByUploadedAtDesc(Submission submission);
+    Optional<SubmissionFile> findTopBySubmissionOrderBySubmissionFileIdDesc(Submission submission);
 
 }
