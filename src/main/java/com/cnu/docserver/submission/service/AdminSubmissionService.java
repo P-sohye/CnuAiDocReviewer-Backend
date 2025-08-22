@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.EnumSet;
 import java.util.List;
 
 @Service
@@ -39,7 +40,13 @@ public class AdminSubmissionService {
     private final SubmissionFileRepository submissionFileRepository; // ★ 추가
     private final DepartmentRepository departmentRepository;
     private final FileStorageService fileStorageService;
-
+    private static final EnumSet<SubmissionStatus> REVIEWABLE_STATUSES =
+            EnumSet.of(
+                    SubmissionStatus.SUBMITTED,
+                    SubmissionStatus.UNDER_REVIEW,
+                    SubmissionStatus.BOT_REVIEW,
+                    SubmissionStatus.NEEDS_FIX
+            );
     @Transactional(readOnly = true)
     public SubmissionDetailDTO getDetail(Integer id) {
 
@@ -165,12 +172,20 @@ public class AdminSubmissionService {
     private Submission requireReviewable(Integer id) {
         Submission s = submissionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "제출을 찾을 수 없습니다."));
-        if (s.getStatus() != SubmissionStatus.SUBMITTED && s.getStatus() != SubmissionStatus.UNDER_REVIEW) {
+
+        if (!REVIEWABLE_STATUSES.contains(s.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "검토 가능한 상태가 아닙니다.");
         }
-        if (s.getStatus() == SubmissionStatus.SUBMITTED) {
-            s.setStatus(SubmissionStatus.UNDER_REVIEW); // 컨벤션상 검토진입 표시
+
+        // 관리자가 개입하면 '검토 중'으로 진입 표시 (기존 컨벤션 유지)
+        if (s.getStatus() == SubmissionStatus.SUBMITTED
+                || s.getStatus() == SubmissionStatus.BOT_REVIEW
+                || s.getStatus() == SubmissionStatus.NEEDS_FIX) {
+            s.setStatus(SubmissionStatus.UNDER_REVIEW);
+            // 같은 트랜잭션 내 flush 시 반영되므로 save 생략해도 무방
+            // submissionRepository.save(s);
         }
+
         return s;
     }
 

@@ -33,8 +33,18 @@ public class SecurityConfig {
                                 "/auth/me",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/api/admin/documents/**",
                                 "/uploads/**",
+
+                                // --- 학생 공개(필요한 최소만) ---
+                                "/api/departments/**",
+                                "/api/doc-types/**",
+                                "/api/doc-types/*/deadline",
+
+                                // 조회만 공개하고 싶다면(권한 체크는 컨트롤러에서 추가 검증 권장)
+                                "/api/submissions/**",
+                                "/api/submissions/my",
+
+                                "/api/admin/documents/**",
                                 "/api/admin/documents/*/file",
                                 "/api/admin/deadline/**",
                                 "/api/admin/departments/**"
@@ -50,15 +60,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         // 프론트 출처
-        config.setAllowedOrigins(List.of("http://localhost:3000","http://localhost:3001"));
-        // 또는 패턴 허용: config.setAllowedOriginPatterns(List.of("http://localhost:*"));
-
-        config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
-        config.setAllowedHeaders(List.of("*")); // Content-Type, X-Requested-With 등
-        config.setExposedHeaders(List.of("Set-Cookie")); // 필요 시
-        config.setExposedHeaders(List.of("Content-Disposition", "Set-Cookie"));
+        config.setAllowedOriginPatterns(List.of("http://localhost:*"));
         config.setAllowCredentials(true);
-
+        config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Content-Disposition", "Set-Cookie"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

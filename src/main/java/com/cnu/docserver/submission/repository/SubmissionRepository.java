@@ -27,7 +27,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     List<Submission> findByStudent_StudentIdAndStatusInOrderBySubmissionIdDesc(
             String studentId, List<SubmissionStatus> statuses, Pageable pageable);
     @Query("""
-      select s
       from Submission s
       join fetch s.student st
       join fetch st.member m

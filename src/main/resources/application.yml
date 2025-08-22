@@ -27,3 +27,15 @@ springdoc:
 
 ocr:
   base-url: http://localhost:8000
+
+logging:
+  level:
+    root: INFO
+    com.cnu.docserver: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security.web.FilterChainProxy: DEBUG
+    org.springframework.security.access: DEBUG
+    com.cnu.docserver.ocr: INFO
+  file:
+    name: /var/log/docserver/app.log
+
