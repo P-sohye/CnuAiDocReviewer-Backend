@@ -17,8 +17,8 @@ public class RestClientConfig {
     @Primary
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         return builder
-                .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(30))
+                .setConnectTimeout(Duration.ofSeconds(10))
+                .setReadTimeout(Duration.ofSeconds(300))
                 .additionalMessageConverters(new ByteArrayHttpMessageConverter())
                 .build();
     }
@@ -27,8 +27,8 @@ public class RestClientConfig {
     @Bean(name = "ocrRestTemplate")
     public RestTemplate ocrRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .setConnectTimeout(Duration.ofSeconds(10))
-                .setReadTimeout(Duration.ofSeconds(120))
+                .setConnectTimeout(Duration.ofSeconds(10))  // 연결 타임아웃
+                .setReadTimeout(Duration.ofSeconds(600))   // 5분으로 확장
                 .additionalMessageConverters(new ByteArrayHttpMessageConverter())
                 .build();
     }

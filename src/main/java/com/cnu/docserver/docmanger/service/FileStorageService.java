@@ -62,9 +62,9 @@ public class FileStorageService {
     }
 
     /** FastAPI 전송용: 저장 파일 바이트 */
-    public byte[] readBytes(String fileUrl) {
+    public byte[] readBytes(String fileUrl) throws FileReadException {
         if (fileUrl == null || !fileUrl.startsWith("/uploads/")) {
-            throw new IllegalArgumentException("잘못된 파일 URL: " + fileUrl);
+            throw new FileReadException("잘못된 파일 URL: " + fileUrl);
         }
         try {
             String relative = java.net.URLDecoder.decode(
@@ -73,11 +73,12 @@ public class FileStorageService {
             );
             Path target = uploadDir.resolve(relative).normalize();
             if (!target.startsWith(uploadDir)) {
-                throw new SecurityException("Invalid path traversal");
+                throw new FileReadException("Invalid path traversal");
             }
             return Files.readAllBytes(target);
         } catch (IOException e) {
-            throw new RuntimeException("파일 읽기 실패: " + e.getMessage(), e);
+            // 구체적인 예외 메시지를 포함하여 새로운 사용자 정의 예외를 던짐
+            throw new FileReadException("파일 읽기 실패: " + e.getMessage(), e);
         }
     }
 
@@ -90,6 +91,15 @@ public class FileStorageService {
             return java.net.URLDecoder.decode(enc, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignore) {
             return enc;
+        }
+    }
+    // 파일 읽기 오류를 위한 사용자 정의 예외
+    public static class FileReadException extends RuntimeException {
+        public FileReadException(String message) {
+            super(message);
+        }
+        public FileReadException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }

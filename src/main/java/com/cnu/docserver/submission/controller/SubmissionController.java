@@ -1,7 +1,6 @@
-// src/main/java/com/cnu/docserver/submission/controller/SubmissionController.java
+// com/cnu/docserver/submission/controller/SubmissionController.java
 package com.cnu.docserver.submission.controller;
 
-import com.cnu.docserver.ocr.repository.OCRReviewResultRepository;
 import com.cnu.docserver.submission.dto.MySubmissionRowDTO;
 import com.cnu.docserver.submission.dto.SubmissionSummaryDTO;
 import com.cnu.docserver.submission.dto.SubmitRequestDTO;
@@ -12,13 +11,13 @@ import com.cnu.docserver.submission.repository.SubmissionFileRepository;
 import com.cnu.docserver.submission.repository.SubmissionHistoryRepository;
 import com.cnu.docserver.submission.repository.SubmissionRepository;
 import com.cnu.docserver.submission.service.SubmissionService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.*;
+import io.swagger.v3.oas.annotations.media.*;
+import io.swagger.v3.oas.annotations.responses.*;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.security.PermitAll;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -31,10 +30,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -43,12 +39,13 @@ import java.util.Map;
 public class SubmissionController {
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final ObjectMapper OM = new ObjectMapper();
 
     private final SubmissionService submissionService;
     private final SubmissionRepository submissionRepository;
     private final SubmissionHistoryRepository submissionHistoryRepository;
     private final SubmissionFileRepository submissionFileRepository;
-    private final OCRReviewResultRepository ocrReviewResultRepo;
+
     /* ---------------- 최초 제출 ---------------- */
     @PreAuthorize("hasRole('STUDENT')")
     @Operation(
@@ -74,7 +71,7 @@ public class SubmissionController {
     }
 
     /* ---------------- 단건 조회(요약) ---------------- */
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("permitAll()")
     @GetMapping("/{submissionId}")
     public SubmissionSummaryDTO getOne(@PathVariable Integer submissionId) {
         return submissionService.getSummary(submissionId);
@@ -108,8 +105,9 @@ public class SubmissionController {
     ) {
         return submissionService.submit(submissionId, body);
     }
-    /* ---------------- 봇 검토 요약(텍스트 로그 포함) ---------------- */
-    @PreAuthorize("hasRole('STUDENT')")
+
+    /* ---------------- 봇 검토 요약(텍스트 로그 + 상세 JSON) ---------------- */
+    @PreAuthorize("permitAll()")
     @GetMapping("/{id}/review-result")
     public Map<String, Object> getBotReviewResult(@PathVariable Integer id) {
         Submission s = submissionRepository.findById(id)
@@ -118,35 +116,60 @@ public class SubmissionController {
         List<SubmissionHistory> histories =
                 submissionHistoryRepository.findBySubmissionOrderBySubmissionHistoryIdAsc(s);
 
-        List<String> memos = histories.stream()
-                .map(SubmissionHistory::getMemo)
+        // 사람이 읽는 로그
+        List<String> debugTexts = histories.stream()
+                .map(h -> Optional.ofNullable(h.getMemo()).orElse(""))
                 .toList();
 
-        // OCR 결과 최신 1건
-        List<Map<String, String>> findings = List.of();
-        String reason = null;
-        var opt = ocrReviewResultRepo.findTopBySubmissionOrderByIdDesc(s);
-        if (opt.isPresent()) {
-            var r = opt.get();
-            // 엔티티 매핑에 따라 타입이 다를 수 있으니 필요한 형태로 변환
-            // 예: r.getFindings()가 List<Finding>라면 그대로 반환하거나 Map으로 변환
-            findings = (List<Map<String,String>>) (Object) r.getFindings();
-            reason = r.getReason();
-        }
+        // 최신 OCR_DETAIL 파싱
+        Map<String, Object> payload = extractLatestOcrDetail(histories);
 
-        return Map.of(
-                "submissionId", s.getSubmissionId(),
-                "status", s.getStatus(),
-                "debugTexts", memos,
-                "submittedAt", s.getSubmittedAt() == null ? null : s.getSubmittedAt().format(ISO),
-                "findings", findings,
-                "reason", reason
-        );
+        // <-- 여기서부터 Map.of() 금지! -->
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("submissionId", s.getSubmissionId());
+        out.put("status", s.getStatus());
+        out.put("submittedAt", s.getSubmittedAt() == null ? null : s.getSubmittedAt().format(ISO));
+        out.put("debugTexts", debugTexts);
+
+        // 프론트에서 우선 사용하는 키들
+        // findings는 항상 리스트로 보장
+        Object findings = payload.get("findings");
+        out.put("findings", (findings instanceof List) ? findings : List.of());
+
+        // verdict/reason은 null 이어도 허용 (HashMap은 null ok)
+        out.put("verdict", payload.get("verdict"));
+        out.put("reason", payload.get("reason"));
+
+        return out;
     }
+
+    /** 히스토리에서 최신 OCR_DETAIL JSON 추출 */
+    private static Map<String, Object> extractLatestOcrDetail(List<SubmissionHistory> histories) {
+        for (int i = histories.size() - 1; i >= 0; i--) {
+            String memo = Optional.ofNullable(histories.get(i).getMemo()).orElse("");
+            if (!memo.startsWith("OCR_DETAIL ")) continue;
+
+            String json = memo.substring("OCR_DETAIL ".length()).trim();
+            try {
+                Map<String, Object> map = OM.readValue(json, new TypeReference<Map<String,Object>>() {});
+                // 정규화
+                Object findings = map.get("findings");
+                if (!(findings instanceof List<?>)) {
+                    map.put("findings", List.of());
+                }
+                // verdict/reason는 없어도 그대로 둠(null 허용)
+                return map;
+            } catch (Exception ignore) {
+                // 파싱 실패 시 다음 후보 계속
+            }
+        }
+        return new HashMap<>(); // 기본값
+    }
+
 
     /* ---------------- 내 제출 현황 ---------------- */
     @PreAuthorize("hasRole('STUDENT')")
-    @GetMapping("/my")                   // 목록은 /my 유지
+    @GetMapping("/my")
     public List<MySubmissionRowDTO> listMySubmissions(
             @RequestParam(name = "limit", defaultValue = "10") int limit,
             @RequestParam(name = "status", required = false) String statusCsv
@@ -170,7 +193,6 @@ public class SubmissionController {
         }).toList();
     }
 
-    // 상태 CSV → Enum 리스트
     private static List<com.cnu.docserver.submission.enums.SubmissionStatus> parseStatuses(String csv) {
         if (csv == null || csv.isBlank()) return Collections.emptyList();
         String[] parts = csv.split(",");
@@ -178,19 +200,13 @@ public class SubmissionController {
         for (String p : parts) {
             String k = p.trim();
             if (k.isEmpty()) continue;
-            try {
-                out.add(com.cnu.docserver.submission.enums.SubmissionStatus.valueOf(k));
-            } catch (IllegalArgumentException ignore) {
-                // 무시: 유효하지 않은 상태 문자열
-            }
+            try { out.add(com.cnu.docserver.submission.enums.SubmissionStatus.valueOf(k)); }
+            catch (IllegalArgumentException ignore) { }
         }
         return out;
     }
 
-    /* ---------------- 유틸 ---------------- */
-    private static boolean nonBlank(String s) {
-        return s != null && !s.isBlank();
-    }
+    private static boolean nonBlank(String s) { return s != null && !s.isBlank(); }
     private static String basenameFromUrl(String url) {
         if (url == null) return null;
         try {
@@ -203,4 +219,5 @@ public class SubmissionController {
             return (idx >= 0 ? url.substring(idx + 1) : url);
         }
     }
+
 }

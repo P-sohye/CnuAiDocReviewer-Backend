@@ -16,6 +16,7 @@ import com.cnu.docserver.submission.entity.SubmissionFile;
 import com.cnu.docserver.submission.entity.SubmissionHistory;
 import com.cnu.docserver.submission.enums.HistoryAction;
 import com.cnu.docserver.submission.enums.SubmissionStatus;
+import com.cnu.docserver.submission.event.SubmissionCreatedEvent;
 import com.cnu.docserver.submission.repository.SubmissionFieldValueRepository;
 import com.cnu.docserver.submission.repository.SubmissionFileRepository;
 import com.cnu.docserver.submission.repository.SubmissionHistoryRepository;
@@ -29,6 +30,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -50,7 +52,7 @@ public class SubmissionService {
     private final StudentRepository studentRepository;
     private final DocTypeRepository docTypeRepository;
     private final SubmissionRepository submissionRepository;
-
+    private final ApplicationEventPublisher eventPublisher;
 
     private final DeadlineRepository deadlineRepository;
 
@@ -61,6 +63,7 @@ public class SubmissionService {
     private final SubmissionFieldValueRepository submissionFieldValueRepository;
     private final SubmissionHistoryRepository submissionHistoryRepository;
 
+    // SubmissionReviewOrchestrator를 직접 호출하지 않으므로 주석 처리하거나 제거 가능
     private final SubmissionReviewOrchestrator submissionReviewOrchestrator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -78,7 +81,7 @@ public class SubmissionService {
         DocType docType = docTypeRepository.findById(docTypeId)
                 .orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND, "문서 유형을 찾을 수 없습니다."));
 
-        // 3)  마감일 1차 체크
+        // 3) 마감일 1차 체크
         ensureNotPastDeadline(docType);
 
         // 4) 파일 필수
@@ -95,24 +98,30 @@ public class SubmissionService {
         submissionRepository.save(submission);
 
         // 6) 파일/필드 upsert
-        upsertFile(submission,file);
-        upsertFieldValues(submission, parseFields(fieldsJson),docType);
+        upsertFile(submission, file);
+        upsertFieldValues(submission, parseFields(fieldsJson), docType);
 
-        // 7) 제출 전이 (학생 제출) → SUBMITTED
+        // 7) 제출 전이 (학생 제출) -> SUBMITTED
         submission.setStatus(SubmissionStatus.SUBMITTED);
         submission.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(submission);
 
 
-        // 8) 이력 기록:  SUBMITTED (학생 제출)
-        writeHistory(submission, null, HistoryAction. SUBMITTED, "학생 제출");
+        // 8) 이력 기록: SUBMITTED (학생 제출)
+        writeHistory(submission, null, HistoryAction.SUBMITTED, "학생 제출");
 
         // 9) 서버가 곧바로 UNDER_REVIEW로 전환
         submission.setStatus(SubmissionStatus.BOT_REVIEW);
         submissionRepository.save(submission);
-        submissionReviewOrchestrator.runBotReview(submission.getSubmissionId());
+
+        // 10) OCR 프로세스를 비동기 실행하는 대신, 이벤트를 발행합니다.
+        // 이 이벤트는 현재 트랜잭션이 성공적으로 커밋된 후에만 리스너를 트리거합니다.
+//        submissionReviewOrchestrator.runBotReview(submission.getSubmissionId());
+        eventPublisher.publishEvent(new SubmissionCreatedEvent(this, submission.getSubmissionId()));
+
         return toSummary(submission);
     }
+
     public String getCurrentStudentId() {
         return currentStudentId();
     }
